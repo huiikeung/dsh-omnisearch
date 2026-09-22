@@ -1,0 +1,35 @@
+# dsh-omnisearch — Host plugin patch layer
+#
+# 1. Re-enables the DSH native model-facing web tools (web_search / web_fetch),
+#    which the web-app bundle disables by default. `tool-web` is a FULL config
+#    replacement: DSH patch semantics assign `config` as a whole object (no
+#    per-key deep merge), so every base key must be restated here.
+#    `fetch: true` is what actually registers the `web_fetch` tool schema and
+#    its system-prompt guidance — without it the model never sees web_fetch at
+#    all, no matter which providers are registered.
+# 2. Pins BOTH web seam providers to this plugin. dsh-omnisearch always writes an
+#    explicit fetchProvider as well: a patch row replaces the row's whole
+#    config, so a plugin that only sets searchProvider drops the fetchProvider
+#    of an earlier bundle. With two usable fetch providers left registered the
+#    seam rejects every call with WEB_PROVIDER_AMBIGUOUS — exactly what happens
+#    when dsh-web-tools + dsh-free-search + modsearch are installed together.
+# 3. Mounts the plugin itself.
+- id: tool-web
+  disabled: false
+  config:
+    search: true
+    fetch: true
+    searchMaxQueries: 4
+    searchMaxResults: 8
+    searchTimeoutMs: 60000
+    fetchTimeoutMs: 30000
+    fetchMaxOutputChars: 200000
+
+- id: web
+  config:
+    searchProvider: dsh-omnisearch
+    fetchProvider: dsh-omnisearch-fetch
+
+- insert:
+    - id: dsh-omnisearch
+      name: 'dsh-omnisearch'
