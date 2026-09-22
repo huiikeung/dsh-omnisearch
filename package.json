@@ -1,6 +1,6 @@
 {
   "name": "dsh-omnisearch",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Unified multi-engine Web Search & Fetch for DeepSeek Harness — 13 engines with keyless tiers (Bing/DDG/AnySearch/Keenable + Exa/Tavily/Firecrawl/Parallel keyless), platform search, sidebar-browser login for Xiaohongshu/X, and one seam with full failover",
   "author": "dsh-omnisearch contributors (based on A3Boy/dsh-web-tools, DDDMUC/dsh-free-search)",
   "license": "MIT",

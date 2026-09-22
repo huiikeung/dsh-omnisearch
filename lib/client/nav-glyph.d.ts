@@ -11,8 +11,9 @@
  * machine when dsh-search was replaced by dsh-omnisearch). So instead of
  * touching the core, find our own nav cell and rewrite its <svg> in place:
  *
- *  - the cell is located by its visible label text, which this plugin owns and
- *    localizes itself, so every shipped language is listed;
+ *  - the cell is located by its visible label text, which this plugin owns;
+ *    this section's `nav` key is the same string in both dictionaries, so one
+ *    label covers every DSH UI language;
  *  - the shell's element, class and box are kept, so the shell's own styling and
  *    the hashed class names it generates keep working across DSH versions;
  *  - a MutationObserver re-applies the glyph whenever the shell re-renders the
@@ -25,7 +26,17 @@ declare const SVG_NS = "http://www.w3.org/2000/svg";
 export type GlyphSpec = {
     viewBox: string;
     markup: string;
+    /** When set (and truthy), the stroke triple is applied on top of `markup`. */
+    stroke?: string;
+    strokeWidth?: string;
 };
+/**
+ * IconGlobeOutline14 — the globe-with-meridians glyph this section's nav cell
+ * shows instead of the core's gear fallback. Geometry was mechanically
+ * extracted from the DSH primitives and verified by rendering in Chromium; do
+ * not tweak the numbers.
+ */
+export declare function navGlyph(): GlyphSpec;
 /**
  * Pin `paint` onto the settings-nav cell whose label is one of `labels`.
  *
