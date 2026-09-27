@@ -15,7 +15,10 @@
     "rootDir": "src",
     "declaration": true,
     "sourceMap": false,
-    "types": ["node"]
+    "types": ["node"],
+    "paths": {
+      "@deepseek-ai/dsh-client-ui-primitives": ["./node_modules/@deepseek-ai-runtime/dsh-client-ui-primitives.d.ts"]
+    }
   },
   "include": ["src/host/**/*.ts", "src/client/**/*.ts", "src/client/**/*.tsx", "src/shared/**/*.ts", "src/types/**/*.d.ts"],
   "exclude": ["src/**/*.test.ts", "routes.smoke.mjs"]

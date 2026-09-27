@@ -7,8 +7,12 @@
  *  - bing      : HTML scrape of bing.com/search (default engine upstream)
  *  - ddg       : HTML scrape of html.duckduckgo.com
  *  - ddg-lite  : HTML scrape of lite.duckduckgo.com
- *  - anysearch : JSON REST (anonymous quota)
+ *  - anysearch : JSON REST (anonymous quota; optional key raises it)
  *  - keenable  : REST with key, keyless MCP endpoint without one
+ *
+ * Plus one KEYED engine merged from the same upstream spec:
+ *
+ *  - serpbase  : Google organic results via API (requires a SerpBase key)
  *
  * Every adapter follows the dsh-web-tools adapter contract (classified
  * ProviderError, SearchHints-driven parameters) so the shared fallback chain,
@@ -43,7 +47,7 @@ const HTML_TIMEOUT_MS = 12_000;
  * knob. Keeps adapters working both from the settings card (global) and from a
  * future per-engine override.
  */
-function knob<T>(options: unknown, key: string, fallback: T): T {
+export function knob<T>(options: unknown, key: string, fallback: T): T {
   if (options && typeof options === "object") {
     const value = (options as Record<string, unknown>)[key];
     if (value !== undefined && value !== null) return value as T;
@@ -200,6 +204,46 @@ function engineQuery(query: string, hints?: Readonly<SearchHints>): string {
   return hints?.cleanQuery?.trim() ? hints.cleanQuery : query;
 }
 
+//#region bing relevance guard (merged from dsh-free-search v0.4.35)
+
+/**
+ * Overlap tokens used to detect Bing's "cached SERP for another query" page.
+ * CJK runs contribute 1-2 character n-grams; latin/digit runs contribute words
+ * of length >= 2.
+ */
+export function queryOverlapTokens(query: string): string[] {
+  const tokens = new Set<string>();
+  for (const run of String(query).match(/[\u4e00-\u9fff]+/g) ?? []) {
+    if (run.length <= 2) tokens.add(run);
+    for (let i = 0; i + 1 < run.length; i++) tokens.add(run.slice(i, i + 2));
+  }
+  for (const word of String(query).toLowerCase().split(/[^a-z0-9]+/)) {
+    if (word.length >= 2) tokens.add(word);
+  }
+  return [...tokens];
+}
+
+/**
+ * Whether ANY result looks related to the query at all.
+ *
+ * Bing answers a no-result query with a completely unrelated cached SERP
+ * (`<li class="b_algo">` blocks are still there, but the content belongs to
+ * another query/hot page — issue #38). Treating that as "0 results" hands the
+ * query to the next engine instead of feeding the model garbage.
+ *
+ * A query made only of punctuation cannot be judged, so it is never blocked.
+ */
+export function looksRelevant(query: string, sources: Source[]): boolean {
+  const tokens = queryOverlapTokens(query);
+  if (tokens.length === 0) return true;
+  return sources.some((s) => {
+    const hay = `${s.title ?? ""} ${s.snippet ?? ""} ${s.url ?? ""}`.toLowerCase();
+    return tokens.some((t) => hay.includes(t.toLowerCase()));
+  });
+}
+
+//#endregion
+
 //#region bing
 
 export const BING_META = {
@@ -243,6 +287,11 @@ export const BingProvider: ProviderAdapter = {
         ...(titleMatch ? { title: stripTags(titleMatch[1]) } : {}),
         ...(snippet ? { snippet } : {}),
       });
+    }
+    // Bing serves an unrelated cached SERP when a query has no real results:
+    // count that as 0 results so the shared chain falls over to the next engine.
+    if (sources.length > 0 && !looksRelevant(engineQuery(query, hints), sources)) {
+      return { sources: [] };
     }
     return { sources: uniqueSources(sources, maxResults ?? 10) };
   },
@@ -353,10 +402,46 @@ export const DuckDuckGoLiteProvider: ProviderAdapter = {
 
 //#region anysearch
 
+/**
+ * Result note when a configured AnySearch key was rejected (merged from
+ * dsh-free-search v0.4.39). It is surfaced as the outcome's `content`, so the
+ * model sees why it fell back to the anonymous tier.
+ */
+export const ANYSEARCH_KEY_INVALID_NOTE = "AnySearch key 无效，本次已忽略该 key，改回免费匿名";
+
+/**
+ * In-process memory of a key AnySearch rejected with 401/403.
+ *
+ * Upstream semantics (v0.4.39): a bad key is ignored for the rest of this
+ * process instead of being deleted from storage, so one bad credential cannot
+ * take the engine down; an explicit user write of a key clears the memory.
+ */
+let ignoredAnysearchKey = "";
+
+/** Allow the next AnySearch call to send a key again (called on key writes). */
+export function resetIgnoredAnysearchKey(): void {
+  ignoredAnysearchKey = "";
+}
+
+/** The key currently ignored in this process (diagnostics/tests). */
+export function ignoredAnysearchKeyValue(): string {
+  return ignoredAnysearchKey;
+}
+
+/**
+ * Which key to send for one call, and whether the configured value is already
+ * known-bad in this process. Pure: the caller owns the sticky state.
+ */
+export function decideAnysearchKey(apiKey: string | undefined): { sendKey: string; sticky: boolean } {
+  const trimmed = typeof apiKey === "string" ? apiKey.trim() : "";
+  const sticky = Boolean(trimmed) && trimmed === ignoredAnysearchKey;
+  return { sendKey: trimmed && !sticky ? trimmed : "", sticky };
+}
+
 export const ANYSEARCH_META = {
   name: "anysearch",
   label: "AI 搜索 AnySearch（无 key 也可用）",
-  description: "AI 搜索 REST 端点，匿名公共额度，无 key 也可用。",
+  description: "AI 搜索 REST 端点，匿名公共额度；可选 key 提额，key 被拒时自动回退匿名。",
   credSuffix: "ANYSEARCH",
   fetchCapable: false,
   needsBaseUrl: false,
@@ -365,19 +450,44 @@ export const ANYSEARCH_META = {
 
 export const AnySearchProvider: ProviderAdapter = {
   ...ANYSEARCH_META,
-  async search(query, maxResults, _apiKey, _baseUrl, contextOrSignal) {
+  async search(query, maxResults, apiKey, _baseUrl, contextOrSignal) {
     const { signal, hints } = resolveContext(contextOrSignal);
-    let res: Response;
-    try {
-      res = await fetchWithProxy(ANYSEARCH_URL, {
+    const { sendKey, sticky } = decideAnysearchKey(apiKey);
+    const doFetch = (key: string) =>
+      fetchWithProxy(ANYSEARCH_URL, {
         method: "POST",
-        headers: { "content-type": "application/json", accept: "application/json" },
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json",
+          ...(key ? { authorization: `Bearer ${key}` } : {}),
+        },
         body: JSON.stringify({ query: engineQuery(query, hints), max_results: maxResults ?? 5 }),
         signal,
       });
+
+    let res: Response;
+    let keyRejected = false;
+    try {
+      res = await doFetch(sendKey);
+      if ((res.status === 401 || res.status === 403) && sendKey) {
+        // Bad key: ignore it for THIS PROCESS only (never touch the stored
+        // credential) and retry anonymously so the engine stays usable.
+        ignoredAnysearchKey = sendKey;
+        keyRejected = true;
+        res = await doFetch("");
+      }
     } catch (error) {
       if (signal?.aborted) throw providerError("aborted", "search aborted by caller");
       throw providerError("network", `AnySearch request failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    if (res.status === 401 || res.status === 403) {
+      throw providerError(
+        "auth",
+        keyRejected
+          ? `${ANYSEARCH_KEY_INVALID_NOTE} (HTTP ${res.status})`
+          : `AnySearch API key rejected (HTTP ${res.status})`,
+        res.status,
+      );
     }
     if (!res.ok) {
       if (res.status === 429) throw providerError("rate-limit", "AnySearch anonymous quota exhausted", res.status);
@@ -403,10 +513,126 @@ export const AnySearchProvider: ProviderAdapter = {
         ...(snippet ? { snippet } : {}),
       });
     }
-    return { sources: uniqueSources(sources, maxResults ?? 10) };
+    return {
+      sources: uniqueSources(sources, maxResults ?? 10),
+      ...(keyRejected || sticky ? { content: ANYSEARCH_KEY_INVALID_NOTE } : {}),
+    };
   },
   async fetch() {
     throw providerError("config", "anysearch does not provide native fetch; use the generic path");
+  },
+};
+
+//#endregion
+
+//#region serpbase (keyed, merged from dsh-free-search v0.4.32 spec 1.12)
+
+const SERPBASE_URL = "https://api.serpbase.dev/google/search";
+
+/** Google `hl`/`gl` per configured language (defaults to en/us, as upstream). */
+const SERPBASE_LOCALE: Record<string, { hl: string; gl: string }> = {
+  zh: { hl: "zh-CN", gl: "cn" },
+  en: { hl: "en", gl: "us" },
+  ru: { hl: "ru", gl: "ru" },
+  ja: { hl: "ja", gl: "jp" },
+  de: { hl: "de", gl: "de" },
+  fr: { hl: "fr", gl: "fr" },
+  es: { hl: "es", gl: "es" },
+  ko: { hl: "ko", gl: "kr" },
+};
+
+/** SerpBase's Google hl/gl for a language code (unknown languages fall back to en). */
+export function serpbaseLocale(lang: string | undefined): { hl: string; gl: string } {
+  return SERPBASE_LOCALE[lang ?? ""] ?? SERPBASE_LOCALE.en;
+}
+
+/**
+ * Parse a SerpBase success body into sources.
+ *
+ * SerpBase always answers HTTP 200 and puts the business status in the JSON
+ * body (`status`: 0 ok / 1001 invalid-or-missing key / 1000 bad request), so
+ * the status field — not the HTTP code — decides success or failure.
+ */
+export function parseSerpbaseBody(
+  data: {
+    status?: number;
+    error?: unknown;
+    organic?: Array<{ link?: string; title?: string; snippet?: string; published_at?: string; date?: string }>;
+  },
+  maxResults: number,
+): Source[] {
+  const sources: Source[] = [];
+  for (const r of data.organic ?? []) {
+    if (!r?.link) continue;
+    const published = r.published_at ?? r.date;
+    sources.push({
+      url: r.link,
+      ...(r.title ? { title: String(r.title) } : {}),
+      ...(r.snippet ? { snippet: String(r.snippet) } : {}),
+      ...(published ? { publishedAt: String(published) } : {}),
+    });
+  }
+  return uniqueSources(sources, maxResults);
+}
+
+export const SERPBASE_META = {
+  name: "serpbase",
+  label: "Google 结果 SerpBase（需 API key）",
+  description: "Google organic 结果 API，需配置 SerpBase key（注册含免费额度）；无 key 时自动跳过。",
+  credSuffix: "SERPBASE",
+  fetchCapable: false,
+  needsBaseUrl: false,
+  // Keyed engine: no credential → the executor skips it (see isKeyless).
+} as const;
+
+export const SerpBaseProvider: ProviderAdapter = {
+  ...SERPBASE_META,
+  async search(query, maxResults, apiKey, _baseUrl, contextOrSignal) {
+    const { signal, hints } = resolveContext(contextOrSignal);
+    if (!apiKey) throw providerError("config", "SerpBase requires an API key (DSH_OMNISEARCH_SERPBASE)");
+    const { hl, gl } = serpbaseLocale(getFreeEngineOptions().lang);
+    let res: Response;
+    try {
+      res = await fetchWithProxy(SERPBASE_URL, {
+        method: "POST",
+        // SerpBase is a plain JSON API: never follow a redirect off-host.
+        redirect: "error",
+        headers: {
+          "x-api-key": apiKey,
+          "content-type": "application/json",
+          accept: "application/json",
+          "user-agent": FREE_ENGINE_USER_AGENT,
+        },
+        body: JSON.stringify({ q: engineQuery(query, hints), hl, gl, page: 1 }),
+        signal,
+      });
+    } catch (error) {
+      if (signal?.aborted) throw providerError("aborted", "search aborted by caller");
+      throw providerError("network", `SerpBase request failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      const status = res.status;
+      if (status === 401 || status === 403) throw providerError("auth", `SerpBase API key rejected (HTTP ${status})`, status);
+      if (status === 429) throw providerError("rate-limit", "SerpBase rate-limited or out of free queries", status);
+      if (status >= 500) throw providerError("server", `SerpBase error (HTTP ${status}): ${detail.slice(0, 200)}`, status);
+      throw providerError("bad-request", `SerpBase API error (HTTP ${status}): ${detail.slice(0, 200)}`, status);
+    }
+    const data = (await res.json()) as {
+      status?: number;
+      error?: unknown;
+      organic?: Array<{ link?: string; title?: string; snippet?: string; published_at?: string; date?: string }>;
+    };
+    if (data.status !== 0) {
+      if (data.status === 1001) {
+        throw providerError("auth", "SerpBase API key is invalid or missing (status 1001) — update the SerpBase credential");
+      }
+      throw providerError("bad-request", `SerpBase API error (status ${data.status}): ${String(data.error ?? "").slice(0, 200)}`);
+    }
+    return { sources: parseSerpbaseBody(data, maxResults ?? 10) };
+  },
+  async fetch() {
+    throw providerError("config", "serpbase does not provide native fetch; use the generic path");
   },
 };
 

@@ -7,7 +7,15 @@
  * (which contain no secrets).
  * @module
  */
-export declare const API_PREFIX = "/omnisearch/api";
+/**
+ * RELATIVE on purpose: the boot HTML carries `<base href="./">`, so this
+ * resolves against the page URL and keeps working under path-prefix entries
+ * (the fnOS gateway serves the app at /app/deepseek-harness/fngateway/). An
+ * absolute "/omnisearch/..." would hit the fnOS nginx root and 404 with a
+ * non-JSON body — the exact "API returned non-JSON (HTTP 404)" symptom the
+ * dsh-context / dsh-vision-assistant panels hit before.
+ */
+export declare const API_PREFIX = "omnisearch/api";
 /** One wire failure. */
 export declare class WebToolsApiError extends Error {
     readonly code: string;
@@ -15,6 +23,12 @@ export declare class WebToolsApiError extends Error {
 }
 /** Call one API method; throws WebToolsApiError on failure. */
 export declare function call<T>(method: string, payload?: unknown): Promise<T>;
+/**
+ * Human `code: message` detail for a thrown API failure (merged from
+ * dsh-free-search v0.4.38): a bare "save failed" leaves the user nothing to act
+ * on, so the wire code — credentials-set / config-save / routing-set — is kept.
+ */
+export declare function describeApiError(e: unknown): string;
 import type { ConfigView, CredentialsView, QuotaDescribeView, SearchMode, SearchModeView, TestProviderView, TestSearchView, SearchRoutingPolicy, VersionCheckView } from "../shared/api-types.ts";
 import type { BrowserPlatform, PlatformStatusResponse } from "../shared/platform-types.ts";
 export type { ConfigView, CredentialsView, ProviderView, QuotaDescribeView, QuotaView, SearchMode, SearchModeView, TestProviderView, TestSearchView, SearchRoutingPolicy, VersionCheckView, } from "../shared/api-types.ts";

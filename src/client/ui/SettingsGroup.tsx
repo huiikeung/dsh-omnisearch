@@ -8,7 +8,7 @@
  * @module
  */
 import { adoptWebToolsStyles } from "./styles.ts";
-import { IconChevronRightOutline14 } from "@deepseek-ai/dsh-client-ui-primitives";
+import { IconChevronRightOutlineMedium } from "@deepseek-ai/dsh-client-ui-primitives";
 
 export function SettingsGroup(props: {
   title?: React.ReactNode;
@@ -83,7 +83,7 @@ export function SettingsRow(props: {
               : { transition: "transform 0.15s ease" }
           }
         >
-          <IconChevronRightOutline14 size={14} />
+          <IconChevronRightOutlineMedium size={14} />
         </div>
       )}
     </>

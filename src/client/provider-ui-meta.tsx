@@ -14,6 +14,9 @@ export const PROVIDER_DASHBOARD: Record<string, { labelKey: string; url: string 
   firecrawl: { labelKey: "dashFirecrawl", url: "https://www.firecrawl.dev/app" },
   jina: { labelKey: "dashJina", url: "https://jina.ai" },
   you: { labelKey: "dashYou", url: "https://you.com/platform" },
+  serpbase: { labelKey: "dashSerpbase", url: "https://serpbase.dev" },
+  tinyfish: { labelKey: "dashTinyfish", url: "https://tinyfish.ai" },
+  openalex: { labelKey: "dashOpenalex", url: "https://openalex.org" },
 };
 
 /** Lookup a provider's dashboard entry; undefined for providers without one. */
@@ -31,6 +34,9 @@ export const PROVIDER_CAPABILITY_KEY: Record<string, string> = {
   parallel: "capability.parallel",
   jina: "capability.jina",
   searxng: "capability.searxng",
+  serpbase: "capability.serpbase",
+  tinyfish: "capability.tinyfish",
+  openalex: "capability.openalex",
 };
 
 /** External-link icon (local SVG; no Unicode ↗ which renders inconsistently). */

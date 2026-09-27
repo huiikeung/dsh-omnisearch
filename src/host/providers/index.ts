@@ -16,7 +16,10 @@ import {
   DuckDuckGoLiteProvider,
   DuckDuckGoProvider,
   KeenableProvider,
+  SerpBaseProvider,
 } from "./free-engines.ts";
+import { OpenAlexProvider } from "./openalex.ts";
+import { TinyfishProvider } from "./tinyfish.ts";
 import type { QuotaProvider, QuotaSnapshot } from "../quota.ts";
 import { dashboardOnlyQuota, localUsageQuota, selfHostedQuota } from "../quota.ts";
 import { tavilyQuota } from "./tavily-quota.ts";
@@ -40,6 +43,8 @@ export const FREE_ENGINE_PROVIDERS: ProviderWithQuota[] = [
   DuckDuckGoLiteProvider,
   AnySearchProvider,
   KeenableProvider,
+  TinyfishProvider,
+  OpenAlexProvider,
 ];
 
 /** Providers that run without any credential at all. */
@@ -54,6 +59,8 @@ export const KEYLESS_PROVIDER_NAMES: string[] = [
   "ddg",
   "ddg-lite",
   "searxng",
+  "tinyfish",
+  "openalex",
 ];
 
 /** All built-in adapters, keyed by name. */
@@ -72,6 +79,11 @@ export const PROVIDERS: Record<string, ProviderWithQuota> = {
   "ddg-lite": DuckDuckGoLiteProvider,
   anysearch: AnySearchProvider,
   keenable: KeenableProvider,
+  // ---- keyed engine merged from the dsh-free-search spec (needs a key) ----
+  serpbase: SerpBaseProvider,
+  // ---- keyless engines ported from dsh-web-search-enhanced ----
+  tinyfish: TinyfishProvider,
+  openalex: OpenAlexProvider,
 };
 
 /** Ordered adapter list for UI/fallback iteration. */
@@ -85,6 +97,7 @@ export const PROVIDER_LIST: ProviderWithQuota[] = [
   JinaProvider,
   SearxngProvider,
   ...FREE_ENGINE_PROVIDERS,
+  SerpBaseProvider,
 ];
 
 /** Look up an adapter; throws a classified config error when unknown. */

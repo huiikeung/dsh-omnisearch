@@ -12,7 +12,10 @@
     "noEmit": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "types": ["node"]
+    "types": ["node"],
+    "paths": {
+      "@deepseek-ai/dsh-client-ui-primitives": ["./node_modules/@deepseek-ai-runtime/dsh-client-ui-primitives.d.ts"]
+    }
   },
   "include": ["src/client/**/*.ts", "src/client/**/*.tsx", "src/shared/**/*.ts"]
 }

@@ -65,7 +65,7 @@ export function apply(ctx: any) {
   // survives DSH runtime updates and other plugins' patches — see nav-glyph.ts.
   // The `nav` label is the same string in both dictionaries, so one label
   // covers every DSH UI language.
-  pinNavGlyph(["网页搜索 Web Search"], "data-omnisearch-nav-icon", navGlyph);
+  pinNavGlyph(["网页搜索"], "data-omnisearch-nav-icon", navGlyph);
 
   // Bilingual ("中文 English") labels for plugin UI now live in the standalone
   // dsh-bilingual-ui plugin (../../dsh-bilingual-ui) so they survive this

@@ -93,7 +93,22 @@ export interface WebToolsSettings {
     /** Whether the engine/status section is injected into the system prompt. */
     promptSection: boolean;
 }
-/** The schema object for settings registration (official z<T> annotation). */
+/**
+ * Unwrap the live `Volatile<T>` references the Loader passes for `.volatile()`
+ * fields into a plain object (once per read, so every read sees the latest
+ * accepted value). Plain configs are returned as-is.
+ */
+export declare function resolvePluginConfig(config: unknown): Partial<WebToolsSettings>;
+/**
+ * The schema object for settings registration (official z<T> annotation).
+ *
+ * Every field carries BOTH a default and the `.volatile()` marker (merged from
+ * dsh-free-search v0.4.36-37, the DSH 0.1.7 config migration):
+ *  - the default lets the Loader resolve a profile entry that declares no
+ *    `config:` at all (0.1.7 parses the entry against this schema);
+ *  - `.volatile()` is what makes the fields live-editable through
+ *    `settings/update` on 0.1.7+, and is ignored by older schemastery.
+ */
 export declare const Config: z<WebToolsSettings>;
 /** A settings-scope handle: current value + write path. */
 export interface ConfigHandle {
@@ -116,9 +131,19 @@ export interface ConfigHandle {
     onChange: (cb: () => void) => () => void;
 }
 /**
- * Register the settings namespace; returns a handle for reads (live) and
+ * Register the settings namespace and return a handle for reads (live) and
  * Host-side writes. The browser card writes through the fenced routes, never
  * through settings/mutate (that proxy's whitelist excludes third-party
  * namespaces).
+ *
+ * Two host generations are supported (merged from dsh-free-search v0.4.36-37):
+ *  - DSH ≤ 0.1.6: `settings.register(ns, schema, { base })` owns the section;
+ *  - DSH 0.1.7+: the profile patch owns the entry config and the Loader hands it
+ *    to `apply` (live refs for volatile fields), so we only declare that we ship
+ *    our own page (`configure({ auto: false })`) and write through
+ *    `settings.update(ns, patch)`.
+ *
+ * `pluginConfig` is the live entry config the Loader passed to `apply` (new
+ * generation only; ignored on the legacy path).
  */
-export declare function installConfig(ctx: WebToolsContext): ConfigHandle;
+export declare function installConfig(ctx: WebToolsContext, pluginConfig?: unknown): ConfigHandle;

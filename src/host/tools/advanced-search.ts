@@ -11,6 +11,7 @@
  */
 import { defineTool, type WebToolsTextBlock, type WebToolsToolDefinition } from "../context-types.ts";
 import { parseTimeRange, timeRangeToFreshness, type ParsedTimeRange } from "../time-range.ts";
+import { wrapUntrustedBlock } from "../untrusted-content.ts";
 import type { SearchHints } from "../search-hints.ts";
 
 /**
@@ -26,6 +27,10 @@ export const TIME_FILTER_ENGINES: string[] = [
   "searxng",
   "ddg",
   "ddg-lite",
+  // Ported from dsh-web-search-enhanced: OpenAlex honours a publication-date
+  // window via `filter=from_publication_date:YYYY-MM-DD`. Tinyfish has no date
+  // parameter (upstream freshness: false) and stays out of this list.
+  "openalex",
 ];
 
 /** Tool argument shape. */
@@ -166,7 +171,9 @@ export function createAdvancedSearchTool(deps: AdvancedSearchDeps): WebToolsTool
           return `${i + 1}. ${r.title}${published} — ${r.url}${snippet}`;
         });
         const note = value.content ? `\n${value.content}` : "";
-        return [{ type: "text", text: `${header}\n${lines.join("\n")}${note}` }];
+        // Web-sourced titles/snippets go inside the untrusted-data boundary
+        // (merged from dsh-free-search v0.4.33); see untrusted-content.ts.
+        return [{ type: "text", text: `${header}\n${wrapUntrustedBlock(`${lines.join("\n")}${note}`)}` }];
       },
     },
     async execute(args) {

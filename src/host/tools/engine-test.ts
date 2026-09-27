@@ -9,6 +9,7 @@
  * @module
  */
 import { defineTool, type WebToolsTextBlock, type WebToolsToolDefinition } from "../context-types.ts";
+import { wrapUntrustedBlock } from "../untrusted-content.ts";
 import type { ProviderAdapterLike } from "../registry.ts";
 
 /** One engine's probe outcome. */
@@ -128,7 +129,13 @@ export function createEngineTestTool(deps: EngineTestDeps): WebToolsToolDefiniti
             : `- ${r.engine}: FAIL - ${r.error}`,
         );
         const extras = deps.extraNotes?.() ?? [];
-        const body = [`Search engine test:`, ...lines, ...(extras.length ? ["", ...extras] : [])].join("\n");
+        // Engine lines carry web-sourced sample titles → untrusted boundary;
+        // the local diagnostic notes stay outside it (v0.4.33 parity).
+        const body = [
+          `Search engine test:`,
+          wrapUntrustedBlock(lines.join("\n")),
+          ...(extras.length ? ["", ...extras] : []),
+        ].join("\n");
         return [{ type: "text", text: body }];
       },
     },

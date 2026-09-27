@@ -155,6 +155,10 @@ const FALLBACK_COLORS: Record<string, { bg: string; letter: string; label: strin
   "ddg-lite": { bg: "#E8714F", letter: "D", label: "DuckDuckGo Lite" },
   anysearch: { bg: "#111827", letter: "A", label: "AnySearch" },
   keenable:  { bg: "#0EA5E9", letter: "K", label: "Keenable" },
+  serpbase:  { bg: "#4285F4", letter: "G", label: "SerpBase" },
+  // Ported from dsh-web-search-enhanced.
+  tinyfish:  { bg: "#2563EB", letter: "T", label: "Tinyfish" },
+  openalex:  { bg: "#AA3355", letter: "OA", label: "OpenAlex" },
 };
 
 function makeFallbackSvg(bg: string, letter: string): string {

@@ -15,6 +15,7 @@ import { poolSummary, type PoolEntry } from "./pool.ts";
 import { buildPool, hintOf } from "./pool.ts";
 import { credRefOf, getProvider, PROVIDER_LIST } from "./providers/index.ts";
 import { isKeyless } from "./providers/types.ts";
+import { resetIgnoredAnysearchKey } from "./providers/free-engines.ts";
 import { PLATFORM_AUTH_CONFIG } from "./browser/session-manager-config.ts";
 import { type StoredCookie } from "./browser/cookie-jar.ts";
 import {
@@ -546,6 +547,9 @@ async function handleCredentialSet(deps: RouteDeps, payload: unknown) {
   getProvider(p.provider); // validate
   const ref = credRefOf(p.provider);
   await deps.writeCredential(ref, p.value ?? "");
+  // A freshly written AnySearch key must be retried: clear this process's
+  // memory of a previously rejected key (dsh-free-search v0.4.39 semantics).
+  if (p.provider === "anysearch") resetIgnoredAnysearchKey();
   const entries = buildPool(p.value ?? "");
   return { configured: entries.length > 0, poolSize: entries.length };
 }
@@ -563,6 +567,8 @@ async function handleCredentialAddKey(deps: RouteDeps, payload: unknown) {
   if (entries.some((e) => e.key === value)) throw new Error("key already configured");
   const next = [...entries.map((e) => e.key), value].join(",");
   await deps.writeCredential(ref, next);
+  // See handleCredentialSet: a new AnySearch key lifts this process's ignore.
+  if (p.provider === "anysearch") resetIgnoredAnysearchKey();
   const pool = buildPool(next);
   return { configured: pool.length > 0, poolSize: pool.length };
 }

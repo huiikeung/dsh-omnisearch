@@ -11,6 +11,7 @@
 import { defineTool, type WebToolsTextBlock, type WebToolsToolDefinition } from "../context-types.ts";
 import { fetchWithProxy } from "../fetch-proxy.ts";
 import { FREE_ENGINE_USER_AGENT } from "../free-engine-options.ts";
+import { wrapUntrustedBlock } from "../untrusted-content.ts";
 
 /** Supported platforms, in the order shown to the model. */
 export const PLATFORM_IDS = [
@@ -288,7 +289,7 @@ export function createPlatformSearchTool(deps: PlatformSearchDeps): WebToolsTool
         return [
           {
             type: "text",
-            text: `platform_search ${value.platform} for "${value.query}" — ${value.count} result(s):\n${lines.join("\n")}`,
+            text: `platform_search ${value.platform} for "${value.query}" — ${value.count} result(s):\n${wrapUntrustedBlock(lines.join("\n"))}`,
           },
         ];
       },

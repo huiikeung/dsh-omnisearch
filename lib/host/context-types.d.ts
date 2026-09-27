@@ -43,9 +43,19 @@ export interface WebToolsWebServer {
 export interface WebToolsWebRuntime {
     trustedHosts: readonly string[];
 }
-/** The settings service face (mirror of dsh-settings SettingsProvider). */
+/**
+ * The settings service face.
+ *
+ * Mirrors BOTH host generations (merged from dsh-free-search v0.4.36-37):
+ *  - DSH ≤ 0.1.6 `SettingsProvider`: `register(ns, schema, { base })`;
+ *  - DSH 0.1.7+ `SettingsForms`: the profile patch owns each plugin entry's
+ *    config, `configure({ auto:false })` only claims the page, and edits go
+ *    through `update(ns, patch)` (unit `mutate(ns, ops)`). Members that are
+ *    absent on a given host are optional, and the plugin feature-detects.
+ */
 export interface WebToolsSettingsService {
-    register<T>(ns: string, schema: unknown, options?: {
+    /** Legacy host (≤ 0.1.6): own a settings namespace. */
+    register?<T>(ns: string, schema: unknown, options?: {
         base?: Partial<T>;
         applies?: "live" | "restart";
     }): {
@@ -54,17 +64,28 @@ export interface WebToolsSettingsService {
         update(patch: object): Promise<void>;
         replace(section: object): Promise<void>;
     };
-    describe(options?: {
+    /** 0.1.7+: claim (or decline) the host-generated page for this plugin fiber. */
+    configure?(presentation: {
+        auto?: boolean;
+    }, owner?: unknown): () => void;
+    /** 0.1.7+: merge editable fields into the profile entry `ns`. */
+    update(ns: string, patch: object, expectedRevision?: number): Promise<void>;
+    /** 0.1.7+: path-addressed edits that do not restate redacted secrets. */
+    mutate?(ns: string, ops: ReadonlyArray<{
+        op: "set" | "unset";
+        path: readonly string[];
+        value?: unknown;
+    }>, expectedRevision?: number): Promise<void>;
+    describe?(options?: {
         redactSecrets?: boolean;
     }): Array<{
         ns: string;
         value?: unknown;
         base?: unknown;
         user?: unknown;
-        applies: "live" | "restart";
+        applies?: "live" | "restart";
         revision: number;
     }>;
-    update(ns: string, patch: object, expectedRevision?: number): Promise<void>;
 }
 /** The credentials service face (mirror of dsh-credentials). */
 export interface WebToolsCredentialsService {
@@ -196,6 +217,8 @@ export interface WebToolsContext {
     on(event: string, listener: (...args: any[]) => unknown, options?: unknown): () => void;
     /** Get an optional registered service (structural mirror of cordis ctx.get). */
     get(name: string): unknown;
+    /** This plugin's cordis fiber (needed by `settings.configure(..., owner)` on 0.1.7+). */
+    fiber?: unknown;
     /** Human-command registry (`ctx.commands`) for /search slash entries. */
     commands: WebToolsCommands;
     /** Tool registry (`ctx.tools`) — merged tool surfaces register here. */

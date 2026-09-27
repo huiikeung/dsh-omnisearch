@@ -9,7 +9,7 @@
 /** zh page copy (key-set source of truth). */
 export const zhDict: Record<string, string> = {
   // Nav label is always bilingual (中文 English) on request, in both languages.
-  nav: "网页搜索 Web Search",
+  nav: "网页搜索",
   title: "网页搜索",
   tagline: "选择搜索来源并设置尝试顺序；某个来源不可用时会自动切换。",
   enabledLabel: "已启用",
@@ -144,6 +144,7 @@ export const zhDict: Record<string, string> = {
   generalProvidersTitle: "通用搜索源",
   loading: "正在加载配置…",
   webToolsError: "网页搜索",
+  saveFailedDetail: "保存失败：{detail}",
   updateAvailableTitle: "发现新版本 v{version}",
   updateAvailableBody: "当前版本 v{current}。更新后可获得新增功能与问题修复。",
   viewUpdate: "查看更新",
@@ -159,6 +160,9 @@ export const zhDict: Record<string, string> = {
   "capability.parallel": "深度搜索 · 内容提取",
   "capability.jina": "网页搜索 · 动态页面读取",
   "capability.searxng": "自托管搜索 · 隐私可控",
+  "capability.serpbase": "Google 结果 · API 配额",
+  "capability.tinyfish": "跨语言网页/新闻 · 每日 50 次免费",
+  "capability.openalex": "学术图谱 · 免费（礼貌池）",
   connectionSettings: "连接设置",
   connectionDefault: "默认",
   connectionConfigured: "已配置",
@@ -373,6 +377,9 @@ export const zhDict: Record<string, string> = {
   dashFirecrawl: "Firecrawl 控制台",
   dashJina: "Jina AI 控制台",
   dashYou: "You.com 控制台",
+  dashSerpbase: "SerpBase 控制台",
+  dashTinyfish: "Tinyfish 官网",
+  dashOpenalex: "OpenAlex 官网",
   // --- Credential / test connection copy ---
   confirmDelete: "确认删除?",
   deleteLabel: "删除",
@@ -383,7 +390,7 @@ export const zhDict: Record<string, string> = {
 /** en page copy, checked complete against the zh key set. */
 export const enDict: Record<string, string> = {
   // Nav label is always bilingual (中文 English) on request, in both languages.
-  nav: "网页搜索 Web Search",
+  nav: "网页搜索",
   title: "Web Search",
   tagline: "Choose search sources and their retry order; unavailable sources are skipped automatically.",
   enabledLabel: "Enabled",
@@ -517,6 +524,7 @@ export const enDict: Record<string, string> = {
   generalProvidersTitle: "General Web Providers",
   loading: "Loading Web Search configuration…",
   webToolsError: "Web Search",
+  saveFailedDetail: "Save failed: {detail}",
   updateAvailableTitle: "Version v{version} is available",
   updateAvailableBody: "You are using v{current}. Update for the latest features and fixes.",
   viewUpdate: "View update",
@@ -532,6 +540,9 @@ export const enDict: Record<string, string> = {
   "capability.parallel": "Web Search · Extract",
   "capability.jina": "Web Search · Page Read",
   "capability.searxng": "Self-hosted Web Search",
+  "capability.serpbase": "Google organic · API quota",
+  "capability.tinyfish": "Cross-language web/news · 50 free/day",
+  "capability.openalex": "Scholarly graph · free (polite pool)",
   connectionSettings: "Connection settings",
   connectionDefault: "Default",
   connectionConfigured: "Configured",
@@ -748,6 +759,9 @@ export const enDict: Record<string, string> = {
   dashFirecrawl: "Firecrawl dashboard",
   dashJina: "Jina AI dashboard",
   dashYou: "You.com dashboard",
+  dashSerpbase: "SerpBase dashboard",
+  dashTinyfish: "Tinyfish website",
+  dashOpenalex: "OpenAlex website",
   // --- Credential / test connection copy ---
   confirmDelete: "Delete this key?",
   deleteLabel: "Delete",

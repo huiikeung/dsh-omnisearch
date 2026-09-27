@@ -204,9 +204,9 @@ async function writeCredential(ctx: WebToolsContext, ref: string, value: string)
   await credentials.set(ref, value);
 }
 
-export function apply(ctx: WebToolsContext) {
+export function apply(ctx: WebToolsContext, pluginConfig?: unknown) {
   const stats = new Stats();
-  const configHandle = installConfig(ctx);
+  const configHandle = installConfig(ctx, pluginConfig);
   const readConfig = () => configHandle.read();
 
   // ---- ctx.web search + fetch providers ----------------------------------
@@ -530,6 +530,14 @@ export function apply(ctx: WebToolsContext) {
     const cfg = readConfig();
     if (!Array.isArray(cfg.fallbackOrder) || cfg.fallbackOrder.length === 0) {
       void configHandle.write({ fallbackOrder: [...DEFAULT_FALLBACK_ORDER] }).catch(() => {});
+    } else {
+      // Engines added by an upgrade (tinyfish/openalex from the web-search-
+      // enhanced port) must join an already-saved order too, or they would sit
+      // "not in order" forever on installs that materialized the older default.
+      const missing = DEFAULT_FALLBACK_ORDER.filter((n) => !cfg.fallbackOrder.includes(n));
+      if (missing.length > 0) {
+        void configHandle.write({ fallbackOrder: [...cfg.fallbackOrder, ...missing] }).catch(() => {});
+      }
     }
   });
   setBraveQuotaPersist((apiKey, snapshot) => {

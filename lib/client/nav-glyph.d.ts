@@ -31,7 +31,7 @@ export type GlyphSpec = {
     strokeWidth?: string;
 };
 /**
- * IconGlobeOutline14 — the globe-with-meridians glyph this section's nav cell
+ * IconGlobeOutlineMedium — the globe-with-meridians glyph this section's nav cell
  * shows instead of the core's gear fallback. Geometry was mechanically
  * extracted from the DSH primitives and verified by rendering in Chromium; do
  * not tweak the numbers.

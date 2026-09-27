@@ -13,16 +13,16 @@
  * keeps its existing comma-joined credential string contract.
  * @module
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent, type MouseEvent } from "react";
 import {
   Button,
-  IconSearchOutline16,
-  IconEditOutline16,
-  IconSettingsOutline16,
+  IconSearchOutlineRegular,
+  IconEditOutlineRegular,
+  IconSettingsOutlineRegular,
   Input,
   StateDot,
 } from "@deepseek-ai/dsh-client-ui-primitives";
-import { api, type ConfigView, type QuotaView, type TestProviderView, type TestSearchView, type ProviderView, type SearchRoutingPolicy, type VersionCheckView, type PlatformStatusResponse } from "./api.ts";
+import { api, describeApiError, type ConfigView, type QuotaView, type TestProviderView, type TestSearchView, type ProviderView, type SearchRoutingPolicy, type VersionCheckView, type PlatformStatusResponse } from "./api.ts";
 import { arePlatformStatusesEqual, getPlatformPollIntervalMs } from "./platform-polling.ts";
 import { text, surface, state as stateColor, button as buttonColor } from "./theme.ts";
 import { ProviderModal } from "./ProviderModal.tsx";
@@ -213,7 +213,7 @@ function ProviderRow(props: {
         </button>
       )}
       {editMode && !inOrder && (
-        <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); onAdd?.(); }} style={{ padding: "0 8px", height: 24 }}>
+        <Button size="sm" variant="outline" onClick={(e: MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); onAdd?.(); }} style={{ padding: "0 8px", height: 24 }}>
           {t("addToChain")}
         </Button>
       )}
@@ -298,10 +298,10 @@ function TestSearchBlock(props: { t: TFunc; config: ConfigView; onError: (msg: s
         <div style={{ flex: 1, minWidth: 0 }}>
           <Input
             value={query}
-            icon={<IconSearchOutline16 size={14} />}
-            onChange={(e) => setQuery(e.target.value)}
+            icon={<IconSearchOutlineRegular size={14} />}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => setQuery(e.target.value)}
             placeholder={t("searchPlaceholder")}
-            onKeyDown={(e) => { if (e.key === "Enter") void run(); }}
+            onKeyDown={(e: KeyboardEvent<HTMLInputElement>) => { if (e.key === "Enter") void run(); }}
           />
         </div>
         <Button variant="primary" size="md" onClick={() => void run()} disabled={testing || !query.trim()}>
@@ -415,6 +415,14 @@ export function WebToolsSection(props: SectionProps) {
   const [overProvider, setOverProvider] = useState<string | null>(null);
   const loadToken = useRef(0);
   const mounted = useRef(true);
+  // Serialized chain-save queue (see saveOrder). MUST be declared here, with the
+  // other hooks: the component early-returns while `config` is still null, so a
+  // hook placed below that return only runs from the second render onward —
+  // React #310 "Rendered more hooks than during the previous render".
+  const saveStateRef = useRef<{ inflight: boolean; pending: { policy: SearchRoutingPolicy; ordered: string[] } | null }>({
+    inflight: false,
+    pending: null,
+  });
 
   useEffect(() => {
     if (config?.providerAttemptTimeoutMs !== undefined) {
@@ -535,11 +543,15 @@ export function WebToolsSection(props: SectionProps) {
 
   const save = async (patch: Record<string, unknown>) => {
     setSaving(true);
+    setError("");
     try {
       await api.configSave(patch);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      // Show WHICH write failed and why (v0.4.38 parity), not a bare "failed".
+      const detail = describeApiError(e);
+      setError(t("saveFailedDetail", { detail }));
+      console.error("[dsh-omnisearch] config save failed:", detail, e);
     } finally {
       setSaving(false);
     }
@@ -566,7 +578,7 @@ export function WebToolsSection(props: SectionProps) {
         setError(`${t("loginWindowFailed")}: ${res.error ?? "unknown"}`);
         return;
       }
-      window.open(`/omnisearch/api/vnc/page?platform=${platform}&token=${res.token}`, "_blank", "noopener");
+      window.open(`omnisearch/api/vnc/page?platform=${platform}&token=${res.token}`, "_blank", "noopener");
     } catch (err: any) {
       setError(`${t("loginWindowFailed")}: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -641,9 +653,54 @@ export function WebToolsSection(props: SectionProps) {
     ...config.fallbackOrder.filter((n) => n !== config.defaultProvider),
   ];
   const providerOf = (name: string) => config.providers.find((p) => p.name === name);
+  // Chain writes are SLOW on the host side (every settings.update rewrites the
+  // profile patch and replays the whole plugin tree — measured 3-5s per save),
+  // so the editor must stay fully client-authoritative:
+  //   1. OPTIMISTIC: apply the new order to local state immediately — the row
+  //      moves/removes on the same tick as the click;
+  //   2. COALESCED + SERIALIZED: one in-flight save at a time; newer edits
+  //      replace the pending payload (last-target-wins), and the post-save
+  //      refresh resyncs authoritative state afterwards;
+  //   3. ROLLBACK: on failure reload the last server-known config and surface
+  //      the error — never leave a row in a phantom state.
+  const applyOrderLocal = (policy: SearchRoutingPolicy, ordered: string[]) => {
+    const next = ordered.filter((n, i) => ordered.indexOf(n) === i);
+    setConfig((c) =>
+      c
+        ? {
+            ...c,
+            searchRoutingPolicy: policy,
+            defaultProvider: next[0] ?? c.defaultProvider,
+            fallbackOrder: next.slice(1),
+          }
+        : c,
+    );
+  };
+  const flushOrderSave = () => {
+    const state = saveStateRef.current;
+    if (state.inflight || !state.pending) return;
+    const { policy, ordered } = state.pending;
+    state.pending = null;
+    state.inflight = true;
+    void api
+      .routingSet(policy, ordered)
+      .then(() => load())
+      .catch((e) => {
+        // Roll the card back to the last server-confirmed state.
+        void load();
+        setError(t("saveFailedDetail", { detail: describeApiError(e) }));
+      })
+      .finally(() => {
+        state.inflight = false;
+        if (state.pending) flushOrderSave();
+      });
+  };
   const saveOrder = (ordered: string[], policy: SearchRoutingPolicy = config.searchRoutingPolicy ?? "ordered") => {
     const next = ordered.filter((n, i) => ordered.indexOf(n) === i);
-    void api.routingSet(policy, next).then(() => load()).catch((e) => setError(e instanceof Error ? e.message : String(e)));
+    if (next.length === 0) return;
+    applyOrderLocal(policy, next);
+    saveStateRef.current.pending = { policy, ordered: next };
+    flushOrderSave();
   };
 
   // Rendering order: providers are listed in the routing order (default +
@@ -778,7 +835,7 @@ export function WebToolsSection(props: SectionProps) {
               </span>
             }
             trailing={
-              <Button size="sm" variant={editingOrder ? "primary" : "outline"} icon={!editingOrder ? <IconEditOutline16 size={13} /> : undefined} onClick={() => {
+              <Button size="sm" variant={editingOrder ? "primary" : "outline"} icon={!editingOrder ? <IconEditOutlineRegular size={13} /> : undefined} onClick={() => {
                 setEditingOrder(!editingOrder);
                 // Drag/reorder targets the provider rows inside the collapsed
                 // 搜索源配置 section — auto-expand it when entering edit mode.
@@ -1241,7 +1298,7 @@ export function WebToolsSection(props: SectionProps) {
           <SettingsRow
             icon={
               <div style={{ display: "inline-flex", alignItems: "center", color: text.secondary }}>
-                <IconSettingsOutline16 size={16} />
+                <IconSettingsOutlineRegular size={16} />
               </div>
             }
             title={t("diagnosticsAndMore")}
